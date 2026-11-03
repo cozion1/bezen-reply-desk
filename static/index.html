@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BEZEN Reply Desk</title>
+<style>
+:root{--bg:#0d1520;--panel:#141f2d;--line:#24324a;--ink:#e6edf3;--mute:#8b9bb0;--acc:#7aa2f7;--good:#7ee2a8;--warn:#f2c46d;--bad:#f7768e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 'Segoe UI',system-ui,sans-serif}
+header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{font-size:20px;margin:0}h1 span{color:var(--acc)}
+.sub{color:var(--mute);font-size:13px}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:7px 14px;cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:#0d1520;font-weight:700}
+button:disabled{opacity:.5;cursor:default}
+.wrap{display:grid;grid-template-columns:minmax(260px,380px) 1fr;min-height:calc(100vh - 70px)}
+@media(max-width:820px){.wrap{grid-template-columns:1fr}}
+aside{border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:12px}
+.counts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.count{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center;font-size:12px;color:var(--mute)}
+.count b{display:block;font-size:18px;color:var(--ink)}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.item.sel{border-color:var(--acc)}
+.item .t{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .m{font-size:12px;color:var(--mute);display:flex;justify-content:space-between;gap:8px}
+.tag{font-size:11px;font-weight:700;letter-spacing:.5px;border-radius:5px;padding:1px 6px;background:#1d2a3d}
+.r-answer_now{color:var(--good)}.r-nurture{color:var(--warn)}.r-human{color:var(--bad)}.r-close{color:var(--mute)}
+main{padding:20px 24px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+.k{font-size:12px;letter-spacing:2px;color:var(--acc);font-weight:700;margin-bottom:6px}
+.quote{background:#2a2410;color:var(--warn);border-radius:6px;padding:2px 6px}
+.grid{display:grid;grid-template-columns:140px 1fr;gap:6px 14px}
+.grid dt{color:var(--mute)}.grid dd{margin:0}
+textarea,input{width:100%;font:inherit;background:#0a0f16;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+textarea{min-height:110px}
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:grid;grid-template-columns:90px 1fr;gap:10px;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
+.steps li:first-child{border-top:0}
+.steps .s{font-weight:700;color:var(--acc)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.empty{color:var(--mute);text-align:center;padding:60px 10px}
+.spin{display:inline-block;width:10px;height:10px;border:2px solid var(--acc);border-top-color:transparent;border-radius:50%;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>BEZEN <span>Reply Desk</span></h1>
+  <div class="sub">Reads what a customer is protecting, decides the next step, drafts it, and waits for a person. Running on a Vultr VM.</div></div>
+  <div class="row" style="margin:0">
+    <button id="load" class="pri">Load sample inbox</button>
+    <span class="sub" id="model"></span>
+  </div>
+</header>
+<div class="wrap">
+  <aside>
+    <div class="counts" id="counts"></div>
+    <details><summary class="sub" style="cursor:pointer">+ Paste a reply</summary>
+      <div style="display:grid;gap:6px;margin-top:8px">
+        <textarea id="newText" placeholder="Paste a customer reply"></textarea>
+        <input id="newCompany" placeholder="Company (optional)">
+        <input id="newAllowed" placeholder="What you may offer (optional)">
+        <button id="add">Read this reply</button>
+      </div>
+    </details>
+    <div id="list" style="display:grid;gap:8px"></div>
+  </aside>
+  <main id="detail"><div class="empty">Load the sample inbox, or paste a reply, to start.</div></main>
+</div>
+<script>
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ROUTE={answer_now:'Answer now',nurture:'Nurture',human:'Human',close:'Close'};
+const STATUS={new:'New',reading:'Reading',awaiting_approval:'Awaiting approval',approved:'Approved',taken_by_human:'Taken by a person',error:'Error'};
+let replies=[], sel=null;
+async function api(p,o={}){const r=await fetch(p,{headers:{'Content-Type':'application/json'},...o});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.status);return j}
+async function refresh(){
+  replies=await api('/api/replies');
+  const c={answer_now:0,nurture:0,human:0,close:0};
+  replies.forEach(r=>{const x=r.reading&&r.reading.route;if(x in c)c[x]++});
+  $('#counts').innerHTML=Object.keys(c).map(k=>`<div class="count r-${k}"><b>${c[k]}</b>${ROUTE[k]}</div>`).join('');
+  $('#list').innerHTML=replies.map(r=>{const rt=r.reading&&r.reading.route;
+    return `<div class="item ${r.id===sel?'sel':''}" data-id="${r.id}"><div class="t">${esc(r.text)}</div>
+    <div class="m"><span>${esc(r.lead.company||'')}</span><span>${r.status==='reading'||r.status==='new'?'<span class="spin"></span>':''} ${rt?`<span class="tag r-${rt}">${ROUTE[rt]}</span>`:''} ${STATUS[r.status]||r.status}</span></div></div>`}).join('');
+  if(sel)show(sel,true);
+  if(replies.some(r=>r.status==='new'||r.status==='reading'))setTimeout(refresh,2500);
+}
+async function show(id,quiet){
+  sel=id; const r=await api('/api/replies/'+id); const g=r.reading||{};
+  if(!quiet)document.querySelectorAll('.item').forEach(e=>e.classList.toggle('sel',+e.dataset.id===id));
+  const ev=g.evidence?esc(r.text).replace(esc(g.evidence.replace(/^["“]|["”]$/g,'')),m=>`<span class="quote">${m}</span>`):esc(r.text);
+  const waiting=r.status==='awaiting_approval';
+  $('#detail').innerHTML=`
+  <div class="card"><div class="k">THE REPLY · ${esc(r.lead.company||'')}</div><div style="font-size:18px">${ev}</div>
+   <div class="sub" style="margin-top:6px">Stage: ${esc(r.lead.stage||'-')} · Last message: ${esc(r.lead.last_message||'-')}</div></div>
+  ${r.reading?`<div class="card"><div class="k">THE READING</div><dl class="grid">
+   <dt>Protecting</dt><dd>${esc(g.protecting)}</dd><dt>Evidence</dt><dd><span class="quote">${esc(g.evidence)}</span></dd>
+   <dt>Must not</dt><dd>${esc(g.must_not)}</dd><dt>Route</dt><dd><span class="tag r-${g.route}">${ROUTE[g.route]||g.route}</span> ${esc(g.why)}</dd></dl></div>`:''}
+  ${waiting?`<div class="card"><div class="k">${g.route==='human'?'A PERSON WRITES THIS ONE':'DRAFT, WAITING FOR YOUR APPROVAL'}</div>
+   <textarea id="msg" placeholder="${g.route==='human'?'Write the reply yourself':''}">${esc(g.draft)}</textarea>
+   <div class="row"><input id="by" value="Team member" style="max-width:200px"><button class="pri" id="ok">Approve and send</button><button id="no">Reject, I'll handle it</button></div></div>`:''}
+  ${r.final_message?`<div class="card"><div class="k">SENT BY ${esc(r.decided_by)}</div><div>${esc(r.final_message)}</div><div class="sub" style="margin-top:6px">${r.follow_up_on?'Follow-up on '+r.follow_up_on:'No follow-up'}</div></div>`:''}
+  <div class="card"><div class="k">EVERY STEP, LOGGED</div><ul class="steps">${r.steps.map(s=>`<li><span class="s">${esc(s.step)}</span><span>${esc(s.detail)} <span class="sub">${esc(s.at.slice(11,19))}</span></span></li>`).join('')}</ul></div>`;
+  if(waiting){
+    $('#ok').onclick=()=>act('approve',{message:$('#msg').value,by:$('#by').value});
+    $('#no').onclick=()=>act('reject',{by:$('#by').value,reason:'handled personally'});
+  }
+}
+async function act(kind,body){try{await api(`/api/replies/${sel}/${kind}`,{method:'POST',body:JSON.stringify(body)});refresh()}catch(e){alert(e.message)}}
+$('#list').onclick=e=>{const i=e.target.closest('.item');if(i)show(+i.dataset.id)};
+$('#load').onclick=async()=>{$('#load').disabled=true;await api('/api/demo/load',{method:'POST'});sel=null;$('#detail').innerHTML='<div class="empty">Reading 8 replies…</div>';$('#load').disabled=false;refresh()};
+$('#add').onclick=async()=>{const t=$('#newText').value.trim();if(!t)return;
+  const r=await api('/api/replies',{method:'POST',body:JSON.stringify({text:t,company:$('#newCompany').value,allowed:$('#newAllowed').value})});
+  $('#newText').value='';sel=r.id;refresh()};
+api('/api/health').then(h=>$('#model').textContent='model: '+h.model).catch(()=>{});
+refresh();
+</script>
+</body>
+</html>

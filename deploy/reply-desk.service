@@ -1,0 +1,13 @@
+[Unit]
+Description=BEZEN Reply Desk
+After=network.target
+
+[Service]
+User=desk
+WorkingDirectory=/opt/reply-desk
+EnvironmentFile=/opt/reply-desk/.env
+ExecStart=/opt/reply-desk/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

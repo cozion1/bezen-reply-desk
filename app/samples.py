@@ -1,0 +1,28 @@
+"""Synthetic sample inbox. Fictional companies and people, written for this demo."""
+
+SAMPLES = [
+    ("Where did you get my email address?",
+     {"company": "Northwind Logistics", "stage": "first contact", "last_message": "Cold email about a fleet scheduling tool",
+      "allowed": "a 20-minute demo"}),
+    ("We tried something like this two years ago and it was a mess. Send me the price and I'll see.",
+     {"company": "Harbor Dental", "stage": "proposal sent", "last_message": "Annual plan proposal",
+      "allowed": "a 30-day pilot"}),
+    ("I like it, but if it flops my boss will remember who pushed for it.",
+     {"company": "Atlas Fitness", "stage": "evaluation", "last_message": "Pricing for 12 locations",
+      "allowed": "a pilot in one location"}),
+    ("My mother is 84 and I feel like I'm abandoning her by even looking at this.",
+     {"company": "Maple Senior Living (family inquiry)", "stage": "inquiry", "last_message": "Brochure and visiting hours",
+      "allowed": "a lunch visit as a guest"}),
+    ("Sounds good. Can we start on the 1st? Who do I send the signed form to?",
+     {"company": "Lumen Yoga Studio", "stage": "contract sent", "last_message": "Contract for the starter plan",
+      "allowed": "onboarding call"}),
+    ("Not now, we are in the middle of a migration. Maybe next quarter.",
+     {"company": "Quartz Accounting", "stage": "demo done", "last_message": "Follow-up after the demo",
+      "allowed": "nothing specific"}),
+    ("Does it work with Hebrew and right-to-left text?",
+     {"company": "Galil Insurance Agency", "stage": "first contact", "last_message": "Intro email",
+      "allowed": "a 20-minute demo"}),
+    ("No thank you. We are happy with our current provider.",
+     {"company": "Cedar Legal", "stage": "first contact", "last_message": "Cold email",
+      "allowed": "nothing specific"}),
+]
