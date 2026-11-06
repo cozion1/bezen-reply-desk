@@ -37,6 +37,24 @@ def test_two_bad_readings_escalate_without_draft():
     assert sum(1 for s in r["steps"] if s["step"] == "check") == 2
 
 
+def test_payment_gate_needs_readiness_route_and_safe_state():
+    from app.critic import payment_allowed
+    lead = {"price": "49.00"}
+    ready = reading(state="ready_yes", route="answer_now", pay_ready=True, pay_evidence="send me the price")
+    assert payment_allowed(ready, lead)[0]
+    assert not payment_allowed(ready, {})[0]
+    assert not payment_allowed({**ready, "pay_ready": False}, lead)[0]
+    assert not payment_allowed({**ready, "state": "price_shield", "route": "nurture"}, lead)[0]
+    assert not payment_allowed({**ready, "state": "career_risk", "route": "human"}, lead)[0]
+
+
+def test_rejects_invented_readiness_and_links_in_draft():
+    probs = check(reading(pay_ready=True, pay_evidence="I will pay today"), "send me the price")
+    assert "pay_evidence is not a word-for-word quote from the reply" in probs
+    probs = check(reading(draft="Pay here https://www.paypal.com/x"), "send me the price")
+    assert "draft must not contain a payment link" in probs
+
+
 def test_retry_then_pass_and_approve_schedules_follow_up():
     rid = store.add_reply("Send me the price and I'll see.", {"company": "Test"})
     answers = iter([reading(evidence="the cost"), reading()])

@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import llm, pipeline, store
+from . import llm, paypal, pipeline, store
 from .samples import SAMPLES
 
 STATIC = os.path.join(os.path.dirname(__file__), "..", "static")
@@ -22,6 +22,8 @@ class NewReply(BaseModel):
     stage: str = Field(default="", max_length=80)
     last_message: str = Field(default="", max_length=300)
     allowed: str = Field(default="", max_length=200)
+    price: str = Field(default="", max_length=12, pattern=r"^$|^\d{1,6}(\.\d{2})?$")
+    offer: str = Field(default="", max_length=120)
 
 
 class Decision(BaseModel):
@@ -32,7 +34,8 @@ class Decision(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "model": f"{llm.provider()}:{llm.model_name()}", "host": "vultr-vm"}
+    return {"ok": True, "model": f"{llm.provider()}:{llm.model_name()}", "host": "vultr-vm",
+            "paypal": "sandbox" if paypal.enabled() else "off"}
 
 
 @app.get("/api/replies")
@@ -74,6 +77,17 @@ def reject(rid: int, body: Decision):
     if not r or r["status"] != "awaiting_approval":
         raise HTTPException(409, "this reply is not waiting for approval")
     return pipeline.reject(rid, body.by, body.reason)
+
+
+@app.post("/api/replies/{rid}/payment")
+def refresh_payment(rid: int):
+    r = store.get(rid)
+    if not r or not (r.get("reading") or {}).get("payment"):
+        raise HTTPException(404, "no payment on this reply")
+    try:
+        return pipeline.refresh_payment(rid)
+    except Exception as e:  # PayPal errors are reported, not hidden
+        raise HTTPException(502, str(e))
 
 
 @app.post("/api/demo/load")

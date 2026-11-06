@@ -41,9 +41,13 @@ Rules:
 - "draft" is the next message in the customer's own language, short, no pressure, no invented offers.
   If the route is "close", the draft thanks them and closes. If the route is "human", the draft is a suggestion for the person who takes over.
 - Use only facts given in the lead record. Do not invent discounts, prices, names or dates.
+- "pay_ready" is true only if the person clearly says they want to buy, start or pay now.
+  Asking for a price, hesitating, or being polite is not readiness. If unsure, false.
+  "pay_evidence" is the exact words that show readiness (copied from the reply), or "" when false.
+  Do not put a payment link in the draft; the system adds it after a person approves.
 
 Answer with JSON only:
-{{"state": "...", "protecting": "...", "evidence": "...", "must_not": "...", "route": "...", "why": "...", "draft": "..."}}"""
+{{"state": "...", "protecting": "...", "evidence": "...", "must_not": "...", "route": "...", "why": "...", "draft": "...", "pay_ready": false, "pay_evidence": ""}}"""
 
 
 def system_prompt() -> str:
@@ -59,6 +63,7 @@ def user_prompt(reply: dict, retry_note: str = "") -> str:
         f"Stage: {lead.get('stage', 'unknown')}",
         f"Last message we sent: {lead.get('last_message', 'unknown')}",
         f"What the business may offer: {lead.get('allowed', 'nothing specific')}",
+        f"Price on record: {lead.get('price', 'none')} {lead.get('currency', '')}".rstrip(),
         "",
         "Customer reply:",
         reply["text"],

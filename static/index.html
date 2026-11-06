@@ -48,7 +48,7 @@ textarea{min-height:110px}
 <body>
 <header>
   <div><h1>BEZEN <span>Reply Desk</span></h1>
-  <div class="sub">Reads what a customer is protecting, decides the next step, drafts it, and waits for a person. Running on a Vultr VM.</div></div>
+  <div class="sub">Reads what a customer is protecting, decides the next step, drafts it, and waits for a person. When a customer is truly ready, it prepares a PayPal checkout link. Running on a Vultr VM.</div></div>
   <div class="row" style="margin:0">
     <button id="load" class="pri">Load sample inbox</button>
     <span class="sub" id="model"></span>
@@ -79,10 +79,12 @@ async function refresh(){
   replies=await api('/api/replies');
   const c={answer_now:0,nurture:0,human:0,close:0};
   replies.forEach(r=>{const x=r.reading&&r.reading.route;if(x in c)c[x]++});
-  $('#counts').innerHTML=Object.keys(c).map(k=>`<div class="count r-${k}"><b>${c[k]}</b>${ROUTE[k]}</div>`).join('');
+  const paid=replies.filter(r=>r.reading&&r.reading.payment).length;
+  $('#counts').innerHTML=Object.keys(c).map(k=>`<div class="count r-${k}"><b>${c[k]}</b>${ROUTE[k]}</div>`).join('')
+    +(paid?`<div class="count" style="grid-column:1/-1;color:#7ee2a8"><b>${paid}</b>PayPal links prepared, waiting for a person</div>`:'');
   $('#list').innerHTML=replies.map(r=>{const rt=r.reading&&r.reading.route;
     return `<div class="item ${r.id===sel?'sel':''}" data-id="${r.id}"><div class="t">${esc(r.text)}</div>
-    <div class="m"><span>${esc(r.lead.company||'')}</span><span>${r.status==='reading'||r.status==='new'?'<span class="spin"></span>':''} ${rt?`<span class="tag r-${rt}">${ROUTE[rt]}</span>`:''} ${STATUS[r.status]||r.status}</span></div></div>`}).join('');
+    <div class="m"><span>${esc(r.lead.company||'')}${r.reading&&r.reading.payment?' · <b style="color:#7ee2a8">PayPal</b>':''}</span><span>${r.status==='reading'||r.status==='new'?'<span class="spin"></span>':''} ${rt?`<span class="tag r-${rt}">${ROUTE[rt]}</span>`:''} ${STATUS[r.status]||r.status}</span></div></div>`}).join('');
   if(sel)show(sel,true);
   else if(replies.length)$('#detail').innerHTML='<div class="empty">Select a reply to see how it was read.</div>';
   if(replies.some(r=>r.status==='new'||r.status==='reading'))setTimeout(refresh,2500);
@@ -98,11 +100,17 @@ async function show(id,quiet){
   ${r.reading?`<div class="card"><div class="k">THE READING</div><dl class="grid">
    <dt>Protecting</dt><dd>${esc(g.protecting)}</dd><dt>Evidence</dt><dd><span class="quote">${esc(g.evidence)}</span></dd>
    <dt>Must not</dt><dd>${esc(g.must_not)}</dd><dt>Route</dt><dd><span class="tag r-${g.route}">${ROUTE[g.route]||g.route}</span> ${esc(g.why)}</dd></dl></div>`:''}
+  ${g.payment?`<div class="card" style="border-color:#003087"><div class="k" style="color:#7ee2a8">PAYPAL CHECKOUT · SANDBOX</div>
+   <dl class="grid"><dt>Order</dt><dd>${esc(g.payment.description)} · <b>${esc(g.payment.amount)} ${esc(g.payment.currency)}</b></dd>
+   <dt>Status</dt><dd><span class="tag">${esc(g.payment.status)}</span> ${r.status==='awaiting_approval'?'<span class="sub">Attached to the message only if you approve.</span>':''}</dd>
+   <dt>Link</dt><dd><a href="${esc(g.payment.url)}" target="_blank" rel="noopener" style="color:var(--acc)">Open PayPal checkout</a></dd></dl>
+   ${r.status==='approved'&&g.payment.status!=='COMPLETED'?'<div class="row"><button id="pay">Check payment status</button></div>':''}</div>`:''}
   ${waiting?`<div class="card"><div class="k">${g.route==='human'?'A PERSON WRITES THIS ONE':'DRAFT, WAITING FOR YOUR APPROVAL'}</div>
    <textarea id="msg" placeholder="${g.route==='human'?'Write the reply yourself':''}">${esc(g.draft)}</textarea>
    <div class="row"><input id="by" value="Team member" style="max-width:200px"><button class="pri" id="ok">Approve and send</button><button id="no">Reject, I'll handle it</button></div></div>`:''}
   ${r.final_message?`<div class="card"><div class="k">SENT BY ${esc(r.decided_by)}</div><div>${esc(r.final_message)}</div><div class="sub" style="margin-top:6px">${r.follow_up_on?'Follow-up on '+r.follow_up_on:'No follow-up'}</div></div>`:''}
   <div class="card"><div class="k">EVERY STEP, LOGGED</div><ul class="steps">${r.steps.map(s=>`<li><span class="s">${esc(s.step)}</span><span>${esc(s.detail)} <span class="sub">${esc(s.at.slice(11,19))}</span></span></li>`).join('')}</ul></div>`;
+  if($('#pay'))$('#pay').onclick=async()=>{try{await api(`/api/replies/${sel}/payment`,{method:'POST'});refresh()}catch(e){alert(e.message)}};
   if(waiting){
     $('#ok').onclick=()=>act('approve',{message:$('#msg').value,by:$('#by').value});
     $('#no').onclick=()=>act('reject',{by:$('#by').value,reason:'handled personally'});
@@ -110,7 +118,7 @@ async function show(id,quiet){
 }
 async function act(kind,body){try{await api(`/api/replies/${sel}/${kind}`,{method:'POST',body:JSON.stringify(body)});refresh()}catch(e){alert(e.message)}}
 $('#list').onclick=e=>{const i=e.target.closest('.item');if(i)show(+i.dataset.id)};
-$('#load').onclick=async()=>{$('#load').disabled=true;await api('/api/demo/load',{method:'POST'});sel=null;$('#detail').innerHTML='<div class="empty">Reading 8 replies…</div>';$('#load').disabled=false;refresh()};
+$('#load').onclick=async()=>{$('#load').disabled=true;await api('/api/demo/load',{method:'POST'});sel=null;$('#detail').innerHTML='<div class="empty">Reading the sample replies…</div>';$('#load').disabled=false;refresh()};
 $('#add').onclick=async()=>{const t=$('#newText').value.trim();if(!t)return;
   const r=await api('/api/replies',{method:'POST',body:JSON.stringify({text:t,company:$('#newCompany').value,allowed:$('#newAllowed').value})});
   $('#newText').value='';sel=r.id;refresh()};
